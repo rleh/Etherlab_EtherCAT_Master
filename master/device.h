@@ -37,6 +37,7 @@
 #ifndef __EC_DEVICE_H__
 #define __EC_DEVICE_H__
 
+#include <linux/module.h>
 #include <linux/interrupt.h>
 
 #include "../devices/ecdev.h"
@@ -61,9 +62,16 @@ typedef enum {
     TX, RX
 } ec_debug_frame_dir_t;
 
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+#define TIMESTRUCT timeval
+#else
+#define TIMESTRUCT timespec64
+#endif
+
 typedef struct {
     ec_debug_frame_dir_t dir;
-    struct timeval t;
+    struct TIMESTRUCT t;
     uint8_t data[EC_MAX_DATA_SIZE];
     unsigned int data_size;
 } ec_debug_frame_t;

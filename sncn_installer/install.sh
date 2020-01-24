@@ -19,7 +19,7 @@ WORK_DIR="${SCRIPT_DIR}/.."
 SYSCONFIG_DIR="/etc/sysconfig/"
 ETHERCAT_SYSCONFIG="/etc/sysconfig/ethercat"
 ETHERCAT_INSTALL_PREFIX="/opt/etherlab"
-CONFIGURE_FLAGS="--enable-sii-assign --disable-8139too --enable-hrtimer --enable-cycles"
+CONFIGURE_FLAGS="--enable-sii-assign --disable-8139too --enable-hrtimer --enable-cycles --enable-debug-if --enable-debug-ring"
 
 do_configure() {
   cd ${WORK_DIR}

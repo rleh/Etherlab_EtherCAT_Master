@@ -64,9 +64,11 @@ static int eccdev_mmap(struct file *, struct vm_area_struct *);
 
 #if LINUX_VERSION_CODE >= PAGE_FAULT_VERSION
 #if LINUX_VERSION_CODE >= VM_FAULT_CHANGE_VERSION
-static int eccdev_vma_fault(struct vm_fault *);
+static vm_fault_t eccdev_vma_fault(struct vm_fault *);
+#warning "vm_fault selected"
 #else
-static int eccdev_vma_fault(struct vm_area_struct *, struct vm_fault *);
+static vm_fault_t eccdev_vma_fault(struct vm_area_struct *, struct vm_fault *);
+#error "vm_area_struct and vm_fault selected"
 #endif /* LINUX_VERSION_CODE >= VM_FAULT_CHANGE_VERSION */
 
 #else
@@ -88,6 +90,13 @@ static struct file_operations eccdev_fops = {
 
 /** Callbacks for a virtual memory area retrieved with ecdevc_mmap().
  */
+
+#define XSTR(x) STR(x)
+#define STR(x) #x
+
+#pragma message "Linux version Code: " XSTR(LINUX_VERSION_CODE)
+#pragma message "Page fault version: " XSTR(PAGE_FAULT_VERSION)
+
 struct vm_operations_struct eccdev_vm_ops = {
 #if LINUX_VERSION_CODE >= PAGE_FAULT_VERSION
     .fault = eccdev_vma_fault
@@ -258,7 +267,7 @@ int eccdev_mmap(
  *
  * \return Zero on success, otherwise a negative error code.
  */
-static int eccdev_vma_fault(
+static vm_fault_t eccdev_vma_fault(
 #if (LINUX_VERSION_CODE < VM_FAULT_CHANGE_VERSION)
         struct vm_area_struct *vma, /**< Virtual memory area. */
 #endif /* (LINUX_VERSION_CODE < VM_FAULT_CHANGE_VERSION) */

@@ -39,17 +39,17 @@
 #include <linux/if_ether.h>
 #include <linux/netdevice.h>
 
-#include "device.h"
 #include "master.h"
+#include "device.h"
 
 #ifdef EC_DEBUG_RING
 #define timersub(a, b, result) \
     do { \
         (result)->tv_sec = (a)->tv_sec - (b)->tv_sec; \
-        (result)->tv_usec = (a)->tv_usec - (b)->tv_usec; \
-        if ((result)->tv_usec < 0) { \
+        (result)->tv_usec = (a)->tv_nsec - (b)->tv_nsec; \
+        if ((result)->tv_nsec < 0) { \
             --(result)->tv_sec; \
-            (result)->tv_usec += 1000000; \
+            (result)->tv_nsec += 1000000000; \
         } \
     } while (0)
 #endif
@@ -88,7 +88,7 @@ int ec_device_init(
 #endif
 #ifdef EC_DEBUG_RING
     device->timeval_poll.tv_sec = 0;
-    device->timeval_poll.tv_usec = 0;
+    device->timeval_poll.tv_nsec = 0;
 #endif
     device->jiffies_poll = 0;
 
@@ -412,7 +412,11 @@ void ec_device_debug_ring_append(
 
     df->dir = dir;
     if (dir == TX) {
-        do_gettimeofday(&df->t);
+        #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+            do_gettimeofday(&df->t);
+        #else
+            ktime_get_real_ts64(&df->t);
+        #endif
     }
     else {
         df->t = device->timeval_poll;
@@ -484,7 +488,11 @@ void ec_device_poll(
 #endif
     device->jiffies_poll = jiffies;
 #ifdef EC_DEBUG_RING
-    do_gettimeofday(&device->timeval_poll);
+    #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+        do_gettimeofday(&device->timeval_poll);
+    #else
+        ktime_get_real_ts64(&device->timeval_poll);
+    #endif
 #endif
     device->poll(device->dev);
 }
