@@ -47,8 +47,8 @@
 #define PRIORITY 1
 
 // Optional features
-#define CONFIGURE_PDOS  1
-#define SDO_ACCESS      0
+#define CONFIGURE_PDOS  0
+#define SDO_ACCESS      1
 
 /****************************************************************************/
 
@@ -59,8 +59,8 @@ static ec_master_state_t master_state = {};
 static ec_domain_t *domain1 = NULL;
 static ec_domain_state_t domain1_state = {};
 
-static ec_slave_config_t *sc_ana_in = NULL;
-static ec_slave_config_state_t sc_ana_in_state = {};
+static ec_slave_config_t *sc_n521 = NULL;
+static ec_slave_config_state_t sc_n521_state = {};
 
 // Timer
 static unsigned int sig_alarms = 0;
@@ -113,10 +113,10 @@ static unsigned int blink = 0;
 
 /*****************************************************************************/
 
-//#if CONFIGURE_PDOS
+#if CONFIGURE_PDOS
 
+/*
 // Analog in --------------------------
-
 static ec_pdo_entry_info_t el3102_pdo_entries[] = {
     {0x3101, 1,  8}, // channel 1 status
     {0x3101, 2, 16}, // channel 1 value
@@ -136,53 +136,42 @@ static ec_sync_info_t el3102_syncs[] = {
     {3, EC_DIR_INPUT, 2, el3102_pdos},
     {0xff}
 };
+*/
 
-// Analog out -------------------------
-
-static ec_pdo_entry_info_t el4102_pdo_entries[] = {
-    {0x3001, 1, 16}, // channel 1 value
-    {0x3002, 1, 16}, // channel 2 value
+/*
+static ec_pdo_entry_info_t n521_pdo_entries[] = {
+    {0x6041, 0, 16}, // Statusword
+    {0x6064, 0, 32}, // Position Actual Value
 };
 
-static ec_pdo_info_t el4102_pdos[] = {
-    {0x1600, 1, el4102_pdo_entries},
-    {0x1601, 1, el4102_pdo_entries + 1}
+static ec_pdo_info_t n521_pdos[] = {
+    {0x0000, 2, n521_pdo_entries},
 };
 
-static ec_sync_info_t el4102_syncs[] = {
-    {2, EC_DIR_OUTPUT, 2, el4102_pdos},
-    {3, EC_DIR_INPUT},
+static ec_sync_info_t n521_syncs[] = {
+    {2, EC_DIR_OUTPUT}, // EC_DIR_OUTPUT: Values written by the master
+    {3, EC_DIR_INPUT, 1, n521_pdos}, // EC_DIR_INPUT: Values read by the master
     {0xff}
 };
+*/
 
-// Digital out ------------------------
-
-static ec_pdo_entry_info_t el2004_channels[] = {
-    {0x3001, 1, 1}, // Value 1
-    {0x3001, 2, 1}, // Value 2
-    {0x3001, 3, 1}, // Value 3
-    {0x3001, 4, 1}  // Value 4
+ec_pdo_info_t n521_pdos[] = {
+    {0x6041}, // Statusword
+    {0x6064}  // Position Actual Value
 };
 
-static ec_pdo_info_t el2004_pdos[] = {
-    {0x1600, 1, &el2004_channels[0]},
-    {0x1601, 1, &el2004_channels[1]},
-    {0x1602, 1, &el2004_channels[2]},
-    {0x1603, 1, &el2004_channels[3]}
+ec_sync_info_t n521_syncs[] = {
+    {3, EC_DIR_INPUT, 2, pdos},
 };
 
-static ec_sync_info_t el2004_syncs[] = {
-    {0, EC_DIR_OUTPUT, 4, el2004_pdos},
-    {1, EC_DIR_INPUT},
-    {0xff}
-};
+
 #endif
 
 /*****************************************************************************/
 
-#if SDO_ACCESS
+//#if SDO_ACCESS
 static ec_sdo_request_t *sdo;
-#endif
+//#endif
 
 /*****************************************************************************/
 
@@ -224,17 +213,17 @@ void check_slave_config_states(void)
 {
     ec_slave_config_state_t s;
 
-    ecrt_slave_config_state(sc_ana_in, &s);
+    ecrt_slave_config_state(sc_n521, &s);
 
-    if (s.al_state != sc_ana_in_state.al_state)
+    if (s.al_state != sc_n521_state.al_state)
         printf("AnaIn: State 0x%02X.\n", s.al_state);
-    if (s.online != sc_ana_in_state.online)
+    if (s.online != sc_n521_state.online)
         printf("AnaIn: %s.\n", s.online ? "online" : "offline");
-    if (s.operational != sc_ana_in_state.operational)
+    if (s.operational != sc_n521_state.operational)
         printf("AnaIn: %soperational.\n",
                 s.operational ? "" : "Not ");
 
-    sc_ana_in_state = s;
+    sc_n521_state = s;
 }
 
 /*****************************************************************************/
@@ -287,24 +276,18 @@ void cyclic_task()
         // check for islave configuration state(s) (optional)
         check_slave_config_states();
 
-#if SDO_ACCESS
+//#if SDO_ACCESS
         // read process data SDO
         read_sdo();
-#endif
+//#endif
 
     }
 
-#if 0
     // read process data
-    printf("AnaIn: state %u value %u\n",
-            EC_READ_U8(domain1_pd + off_ana_in_status),
-            EC_READ_U16(domain1_pd + off_ana_in_value));
-#endif
+    printf("Nanotec Status: %u \n", EC_READ_U8(domain1_pd + nanotec_status));
 
-#if 1
     // write process data
-    EC_WRITE_U8(domain1_pd + off_dig_out, blink ? 0x06 : 0x09);
-#endif
+    EC_WRITE_U8(domain1_pd + nanotec_position_actual, blink ? 200 : 50);
 
     // send process data
     ecrt_domain_queue(domain1);
@@ -337,55 +320,29 @@ int main(int argc, char **argv)
     if (!domain1)
         return -1;
 
-    if (!(sc_ana_in = ecrt_master_slave_config(
-                    master, AnaInSlavePos, Beckhoff_EL3102))) {
+    if (!(sc_n521 = ecrt_master_slave_config(
+                    master, NanotecFirst, Nanotec_N521))) {
         fprintf(stderr, "Failed to get slave configuration.\n");
         return -1;
     }
 
-#if SDO_ACCESS
+//#if SDO_ACCESS
     fprintf(stderr, "Creating SDO requests...\n");
-    if (!(sdo = ecrt_slave_config_create_sdo_request(sc_ana_in, 0x3102, 2, 2))) {
+    // 3202h: Motor Drive Submode Select
+    if (!(sdo = ecrt_slave_config_create_sdo_request(sc_n521, 0x3202, 2, 4))) {
         fprintf(stderr, "Failed to create SDO request.\n");
         return -1;
     }
     ecrt_sdo_request_timeout(sdo, 500); // ms
-#endif
+//#endif
 
 #if CONFIGURE_PDOS
     printf("Configuring PDOs...\n");
-    if (ecrt_slave_config_pdos(sc_ana_in, EC_END, el3102_syncs)) {
-        fprintf(stderr, "Failed to configure PDOs.\n");
-        return -1;
-    }
-
-    if (!(sc = ecrt_master_slave_config(
-                    master, AnaOutSlavePos, Beckhoff_EL4102))) {
-        fprintf(stderr, "Failed to get slave configuration.\n");
-        return -1;
-    }
-
-    if (ecrt_slave_config_pdos(sc, EC_END, el4102_syncs)) {
-        fprintf(stderr, "Failed to configure PDOs.\n");
-        return -1;
-    }
-
-    if (!(sc = ecrt_master_slave_config(
-                    master, DigOutSlavePos, Beckhoff_EL2032))) {
-        fprintf(stderr, "Failed to get slave configuration.\n");
-        return -1;
-    }
-
-    if (ecrt_slave_config_pdos(sc, EC_END, el2004_syncs)) {
+    if (ecrt_slave_config_pdos(sc_n521, EC_END, n521_syncs)) {
         fprintf(stderr, "Failed to configure PDOs.\n");
         return -1;
     }
 #endif
-
-    // Create configuration for bus coupler
-    sc = ecrt_master_slave_config(master, BusCouplerPos, Beckhoff_EK1100);
-    if (!sc)
-        return -1;
 
     if (ecrt_domain_reg_pdo_entry_list(domain1, domain1_regs)) {
         fprintf(stderr, "PDO entry registration failed!\n");
